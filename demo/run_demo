@@ -80,7 +80,7 @@ do
     continue
   ;;
   --bg)
-    if [[ "${AGENT}" == "alice" ]] || [[ "${AGENT}" == "faber" ]] || [[ "${AGENT}" == "acme" ]]; then
+    if [[ "${AGENT}" == "alice" ]] || [[ "${AGENT}" == "faber" ]] || [[ "${AGENT}" == "acme" ]]|| [[ "${AGENT}" == "user" ]]; then
       DOCKER_OPTS="-d"
       echo -e "\nRunning in ${AGENT} in the background. Note that you cannot use the command line console in this mode."
       echo To see the logs use: \"docker logs ${AGENT}\".

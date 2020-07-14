@@ -173,6 +173,12 @@ class DemoAgent:
         self.did = None
         self.wallet_stats = []
 
+        self.credential_definition_ids = {}
+        self.revocation_registry_ids = {}
+        self.schema_ids = {}
+        self.schemas = {}
+        self.versions = {}
+
     async def register_schema_and_creddef(
         self, schema_name, version, schema_attrs, support_revocation: bool = False
     ):

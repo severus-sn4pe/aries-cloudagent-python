@@ -53,6 +53,17 @@ class UserAgent(DemoAgent):
         # based on credential_definition_id
         self.cred_attrs = {}
 
+        self.schemas = {
+            "work_experience": ["position", "employer", "city", "country",
+                                "periodFrom", "periodTo", "ongoing", "activities", "website"],
+            "education": ["title", "organisation", "city", "country",
+                          "periodFrom", "periodTo", "ongoing", "subject", "website", "field", "validUntil"]
+        }
+        self.versions = {
+            "work_experience": "1.1.1",
+            "education": "1.1.1"
+        }
+
 
     async def detect_connection(self):
         await self._connection_ready
@@ -112,6 +123,24 @@ class UserAgent(DemoAgent):
             except ClientError:
                 pass
 
+        elif state == "offer_received":
+            log_status("#15 After receiving credential offer, send credential request")
+            await self.admin_POST(f"/issue-credential/records/{credential_exchange_id}/send-request")
+
+        elif state == "credential_acked":
+            cred_id = message["credential_id"]
+            self.log(f"Stored credential {cred_id} in wallet")
+            log_status(f"#18.1 Stored credential {cred_id} in wallet")
+            resp = await self.admin_GET(f"/credential/{cred_id}")
+            log_json(resp, label="Credential details:")
+            log_json(
+                message["credential_request_metadata"],
+                label="Credential request metadata:",
+            )
+            self.log("credential_id", message["credential_id"])
+            self.log("credential_definition_id", message["credential_definition_id"])
+            self.log("schema_id", message["schema_id"])
+
     async def handle_present_proof(self, message):
         state = message["state"]
 
@@ -133,6 +162,24 @@ class UserAgent(DemoAgent):
 
     async def handle_basicmessages(self, message):
         self.log("Received message:", message["content"])
+
+
+async def register_schema(agent, schema_name, revocation):
+    schema = agent.schemas[schema_name]
+    version = agent.versions[schema_name]
+
+    with log_timer(f"Publish schema/cred def for {schema_name} duration:"):
+        log_status(f"#3/4 Create a new schema/cred def on the ledger for {schema_name}")
+
+        agent.schema_ids[schema_name], cred_def_id = await (
+            agent.register_schema_and_creddef(f"{schema_name} schema", version, schema, support_revocation=revocation))
+        agent.credential_definition_ids[schema_name] = cred_def_id
+
+    if revocation:
+        with log_timer(f"Publish revocation registry for {schema_name} duration:"):
+            log_status(f"#5/6 Create and publish the revocation registry on the ledger for {schema}")
+            agent.revocation_registry_ids[schema_name] = await (
+                agent.create_and_publish_revocation_registry(cred_def_id, TAILS_FILE_COUNT))
 
 
 async def main(
@@ -167,36 +214,8 @@ async def main(
         log_msg("Endpoint URL is at:", agent.endpoint)
 
         # Create a schema
-        with log_timer("Publish schema/cred def duration:"):
-            log_status("#3/4 Create a new schema/cred def on the ledger")
-            version = format(
-                "%d.%d.%d"
-                % (
-                    random.randint(1, 101),
-                    random.randint(1, 101),
-                    random.randint(1, 101),
-                )
-            )
-            (
-                _,  # schema id
-                credential_definition_id,
-            ) = await agent.register_schema_and_creddef(
-                "degree schema",
-                version,
-                ["name", "date", "degree", "age", "timestamp"],
-                support_revocation=revocation,
-            )
-
-        if revocation:
-            with log_timer("Publish revocation registry duration:"):
-                log_status(
-                    "#5/6 Create and publish the revocation registry on the ledger"
-                )
-                await agent.create_and_publish_revocation_registry(
-                    credential_definition_id, TAILS_FILE_COUNT
-                )
-
-        # TODO add an additional credential for Student ID
+        await register_schema(agent, "work_experience", True)
+        await register_schema(agent, "education", True)
 
         with log_timer("Generate invitation duration:"):
             # Generate an invitation
@@ -255,31 +274,39 @@ async def main(
                 log_status("#13 Issue credential offer to X")
 
                 # TODO define attributes to send for credential
-                agent.cred_attrs[credential_definition_id] = {
-                    "name": "Alice Smith",
-                    "date": "2018-05-28",
-                    "degree": "Maths",
-                    "age": "24",
-                    "timestamp": str(int(time.time())),
+                credential_name = 'work_experience'
+                credential_definition_id = agent.credential_definition_ids[credential_name]
+                attributes = {
+                    "position": "Pos",
+                    "employer": "Test",
+                    "city": "A",
+                    "country": "B",
+                    "periodFrom": "12345",
+                    "periodTo": "20000",
+                    "ongoing": "0",
+                    "activities": "",
+                    "website": "",
                 }
 
-                cred_preview = {
-                    "@type": CRED_PREVIEW_TYPE,
-                    "attributes": [
-                        {"name": n, "value": v}
-                        for (n, v) in agent.cred_attrs[credential_definition_id].items()
-                    ],
-                }
-                offer_request = {
-                    "connection_id": agent.connection_id,
+                schema_id = agent.schema_ids[credential_name]
+                schemaInfo = schema_id.split(':')
+                credential = {
+                    "schema_issuer_did": schemaInfo[0],
+                    "schema_id": schema_id,
+                    "schema_name": schemaInfo[2],
+                    "issuer_did": schemaInfo[0],
+                    "schema_version": '1.1.1',
                     "cred_def_id": credential_definition_id,
-                    "comment": f"Offer on cred def id {credential_definition_id}",
-                    "auto_remove": False,
-                    "credential_preview": cred_preview,
-                    "trace": exchange_tracing,
+                    "connection_id": agent.connection_id,
+                    "credential_proposal": {
+                        "@type": "did:sov:BzCbsNYhMrjHiqZDTUASHg;spec/issue-credential/1.0/credential-preview",
+                        "attributes": [{"name": n, "value": v} for (n, v) in attributes.items()],
+                    },
+                    # "auto_remove": False,
+                    # "trace": exchange_tracing,
                 }
-                await agent.admin_POST("/issue-credential/send-offer", offer_request)
-                # TODO issue an additional credential for Student ID
+
+                await agent.admin_POST("/issue-credential/send", credential)
 
             elif option == "2":
                 log_status("#20 Request proof of degree from alice")
@@ -410,7 +437,7 @@ async def main(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Runs a Faber demo agent.")
+    parser = argparse.ArgumentParser(description="Runs a User agent.")
     parser.add_argument("--no-auto", action="store_true", help="Disable auto issuance")
     parser.add_argument(
         "-p",
@@ -443,8 +470,7 @@ if __name__ == "__main__":
             import pydevd_pycharm
 
             print(
-                "Faber remote debugging to "
-                f"{PYDEVD_PYCHARM_HOST}:{PYDEVD_PYCHARM_CONTROLLER_PORT}"
+                f"User remote debugging to {PYDEVD_PYCHARM_HOST}:{PYDEVD_PYCHARM_CONTROLLER_PORT}"
             )
             pydevd_pycharm.settrace(
                 host=PYDEVD_PYCHARM_HOST,
