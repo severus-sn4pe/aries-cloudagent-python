@@ -80,7 +80,7 @@ do
     continue
   ;;
   --bg)
-    if [[ "${AGENT}" == "alice" ]] || [[ "${AGENT}" == "faber" ]] || [[ "${AGENT}" == "acme" ]]; then
+    if [[ "${AGENT}" == "alice" ]] || [[ "${AGENT}" == "faber" ]] || [[ "${AGENT}" == "bob" ]]; then
       DOCKER_OPTS="-d"
       echo -e "\nRunning in ${AGENT} in the background. Note that you cannot use the command line console in this mode."
       echo To see the logs use: \"docker logs ${AGENT}\".
@@ -118,23 +118,26 @@ EOF
 done
 
 if [ "$AGENT" = "faber" ]; then
-  AGENT_MODULE="faber"
+  AGENT_MODULE="user"
   AGENT_PORT=8020
+  AGENT_NAME="Faber"
   AGENT_PORT_RANGE=8020-8027
 elif [ "$AGENT" = "alice" ]; then
-  AGENT_MODULE="alice"
+  AGENT_MODULE="user"
   AGENT_PORT=8030
+  AGENT_NAME="Alice"
   AGENT_PORT_RANGE=8030-8037
-elif [ "$AGENT" = "acme" ]; then
-  AGENT_MODULE="acme"
+elif [ "$AGENT" = "bob" ]; then
+  AGENT_MODULE="user"
   AGENT_PORT=8040
+  AGENT_NAME="Bob"
   AGENT_PORT_RANGE=8040-8047
 elif [ "$AGENT" = "performance" ]; then
   AGENT_MODULE="performance"
   AGENT_PORT=8030
   AGENT_PORT_RANGE=8030-8038
 else
-  echo "Please specify which agent you want to run. Choose from 'faber', 'alice', 'acme', or 'performance'."
+  echo "Please specify which agent you want to run. Choose from 'faber', 'alice', 'bob', or 'performance'."
   exit 1
 fi
 
@@ -229,8 +232,7 @@ DOCKER=${DOCKER:-docker}
 
 echo "Starting $AGENT..."
 $DOCKER run --name $AGENT --rm -it ${DOCKER_OPTS} \
-  --network=${DOCKER_NET} \
+  --network=hslu \
   -p 0.0.0.0:$AGENT_PORT_RANGE:$AGENT_PORT_RANGE \
   -v "/$(pwd)/../logs:/home/indy/logs" \
-  $DOCKER_ENV \
-  faber-alice-demo $AGENT_MODULE --port $AGENT_PORT $ARGS
+  $DOCKER_ENV faber-alice-demo $AGENT_NAME --port $AGENT_PORT $ARGS

@@ -21,7 +21,9 @@ if ! [ -z "$TAILS_NGROK_NAME" ]; then
     echo "fetched tails server end point [$PUBLIC_TAILS_URL]"
 fi
 
+export AGENT_ROLE=user
 export AGENT_NAME=$1
 shift
-echo "Starting [$AGENT_NAME] agent ... with args [$@]"
-python -m demo.runners.$AGENT_NAME $@
+
+echo "Starting $AGENT_ROLE agent as $AGENT_NAME with [$@]"
+python -m demo.runners.$AGENT_ROLE $@

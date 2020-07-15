@@ -19,7 +19,7 @@ from aiohttp import (
     ClientTimeout,
 )
 
-from .utils import flatten, log_json, log_msg, log_timer, output_reader
+from .utils import flatten, log_json, log_msg, log_timer, output_reader, log_status
 
 LOGGER = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ DEFAULT_BIN_PATH = "../bin"
 DEFAULT_PYTHON_PATH = ".."
 
 START_TIMEOUT = float(os.getenv("START_TIMEOUT", 30.0))
+TAILS_FILE_COUNT = int(os.getenv("TAILS_FILE_COUNT", 20))
 
 RUN_MODE = os.getenv("RUNMODE")
 
@@ -173,9 +174,30 @@ class DemoAgent:
         self.did = None
         self.wallet_stats = []
 
-    async def register_schema_and_creddef(
-        self, schema_name, version, schema_attrs, support_revocation: bool = False
-    ):
+        self.credential_definition_ids = {}
+        self.revocation_registry_ids = {}
+        self.schema_ids = {}
+        self.schemas = {}
+        self.versions = {}
+
+    async def register_schema_facade(self, schema_name, revocation):
+        schema = self.schemas[schema_name]
+        version = self.versions[schema_name]
+
+        with log_timer(f"Publish schema/cred def for {schema_name} duration:"):
+            log_status(f"#3/4 Create a new schema/cred def on the ledger for {schema_name}")
+
+            self.schema_ids[schema_name], cred_def_id = await (
+                self.register_schema_and_creddef(f"{schema_name} schema", version, schema,
+                                                 support_revocation=revocation))
+            self.credential_definition_ids[schema_name] = cred_def_id
+        if revocation:
+            with log_timer(f"Publish revocation registry for {schema_name} duration:"):
+                log_status(f"#5/6 Create and publish the revocation registry on the ledger for {schema}")
+                self.revocation_registry_ids[schema_name] = await (
+                    self.create_and_publish_revocation_registry(cred_def_id, TAILS_FILE_COUNT))
+
+    async def register_schema_and_creddef(self, schema_name, version, schema_attrs, support_revocation: bool = False):
         # Create a schema
         schema_body = {
             "schema_name": schema_name,
