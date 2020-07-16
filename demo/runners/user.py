@@ -52,12 +52,12 @@ class UserAgent(DemoAgent):
         self.schemas = {
             "work_experience": ["position", "employer", "city", "country",
                                 "periodFrom", "periodTo", "ongoing", "activities", "website"],
-            "education": ["title", "organisation", "city", "country",
-                          "periodFrom", "periodTo", "ongoing", "subject", "website", "field", "validUntil"]
+            # "education": ["title", "organisation", "city", "country",
+            #              "periodFrom", "periodTo", "ongoing", "subject", "website", "field", "validUntil"]
         }
         self.versions = {
             "work_experience": "1.1.1",
-            "education": "1.1.1"
+            # "education": "1.1.1"
         }
 
     async def detect_connection(self):
@@ -172,7 +172,7 @@ async def main(start_port: int, no_auto: bool = False, revocation: bool = False,
         log_msg("Endpoint URL is at:", agent.endpoint)
 
         await agent.register_schema_facade("work_experience", True)
-        await agent.register_schema_facade("education", True)
+        # await agent.register_schema_facade("education", True)
 
         connection = await agent.admin_POST("/connections/create-invitation")
 
